@@ -12,6 +12,7 @@ CONTAINER_NAME=$1
 EXTERNAL_IP=$2
 MITM_PORT=$3
 OPEN_PORT=$4
+DIRECTORY_NAME=""
 
 
 if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
@@ -26,6 +27,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     # Set the name and open port for the configuration
     CONTAINER_NAME="control_honeypot"
     OPEN_PORT=22
+    DIRECTORY_NAME="control_honeypot"
 
     # Create and start container for specific configuration
     # Note: Control Honeypot SSH Server will be installed below, no need to do anything more for control
@@ -38,6 +40,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     # Set the name and open port for the configuration
     CONTAINER_NAME="HTTP_honeypot"
     OPEN_PORT=80
+    DIRECTORY_NAME="HTTP_honeypot"
 
     # Create and start specific configuration
     # Need to install necessary service
@@ -50,6 +53,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     # Set the name and open port for the configuration
     CONTAINER_NAME="HTTPS_honeypot"
     OPEN_PORT=443
+    DIRECTORY_NAME="HTTPS_honeypot"
 
     # Create and start specific configuration
     # Need to install necessary service
@@ -62,6 +66,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     # Set the name and open port for the configuration
     CONTAINER_NAME="SMTP_honeypot"
     OPEN_PORT=25
+    DIRECTORY_NAME="SMTP_honeypot"
 
     # Create and start specific configuration
     # Need to install necessary service
@@ -96,14 +101,18 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
 
 
   # Start MITM server, running the forever command to be listening on a specific port
-  sudo forever -l ~/$DIRECTORY_NAME/"$CONTAINER_NAME.log -> $(date)" -a start --uid "mitm_id_$CONTAINER_NAME" ~/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p $MITM_PORT --auto-access --auto-access-fixed 1 --debug --mitm-ip $HOST_IP
+  LOG_FILE="$CONTAINER_NAME.log -> $(date)"
+  sudo forever -l ~/$DIRECTORY_NAME/$LOG_FILE -a start --uid "mitm_id_$CONTAINER_NAME" ~/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p $MITM_PORT --auto-access --auto-access-fixed 1 --debug --mitm-ip $HOST_IP
 
 
   # Call attacker detection script with the necessary arguments
-  ./attacker_detection.sh  "~/$DIRECTORY_NAME/"$CONTAINER_NAME.log -> $(date)" $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT $OPEN_PORT
+  ./attacker_detection.sh  "~/$DIRECTORY_NAME/$LOG_FILE" $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT $OPEN_PORT
 
 
 else 
+  # Sleep for an hour to give attackers only an hour to attack before deletion
+  sleep 1h
+  
   # If container already exists delete container and iptables rules
   CONTAINER_IP=$(sudo lxc-info $CONTAINER_NAME -iH)
   sudo iptables --table nat --delete POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
