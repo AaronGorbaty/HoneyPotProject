@@ -115,6 +115,7 @@ else
   
   # If container already exists delete container and iptables rules
   CONTAINER_IP=$(sudo lxc-info $CONTAINER_NAME -iH)
+  sudo ip addr delete $EXTERNAL_IP/16 brd + dev eth1
   sudo iptables --table nat --delete POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
   sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --jump DNAT --to-destination $CONTAINER_IP
 
