@@ -110,6 +110,8 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   ./attacker_detection.sh ~/$DIRECTORY_NAME/"$LOG_FILE" $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT $OPEN_PORT
 
 else 
+  # Attacker detection script triggers this and so we countdown 1 hour until we kick off attackers
+  sleep 1h
   # If container already exists delete container and iptables rules
   CONTAINER_IP=$(sudo lxc-info $CONTAINER_NAME -iH)
   sudo ip addr delete $EXTERNAL_IP/24 brd + dev eth1
