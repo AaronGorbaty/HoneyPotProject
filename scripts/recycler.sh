@@ -23,7 +23,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   if [[ $random_hex == "0" || $random_hex == "1" || $random_hex == "2" || $random_hex == "3" ]]
   then
     # Set the name and open port for the configuration
-    CONTAINER_NAME="control_honeypot"
+    CONTAINER_NAME="control_honeypot_$EXTERNAL_IP"
     OPEN_PORT=22
     DIRECTORY_NAME="control_honeypot"
 
@@ -36,7 +36,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   elif [[ $random_hex == "4" || $random_hex  == "5" || $random_hex == "6" || $random_hex == "7" ]]
   then
     # Set the name and open port for the configuration
-    CONTAINER_NAME="HTTP_honeypot"
+    CONTAINER_NAME="HTTP_honeypot_$EXTERNAL_IP"
     OPEN_PORT=80
     DIRECTORY_NAME="HTTP_honeypot"
 
@@ -52,7 +52,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   elif [[ $random_hex == "8" || $random_hex  == "9" || $random_hex == "a" || $random_hex == "b" ]]
   then
     # Set the name and open port for the configuration
-    CONTAINER_NAME="HTTPS_honeypot"
+    CONTAINER_NAME="HTTPS_honeypot_$EXTERNAL_IP"
     OPEN_PORT=443
     DIRECTORY_NAME="HTTPS_honeypot"
 
@@ -68,7 +68,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   elif [[ $random_hex == "c" || $random_hex == "d" || $random_hex == "e" || $random_hex == "f" ]]
   then
     # Set the name and open port for the configuration
-    CONTAINER_NAME="SMTP_honeypot"
+    CONTAINER_NAME="SMTP_honeypot_$EXTERNAL_IP"
     OPEN_PORT=25
     DIRECTORY_NAME="SMTP_honeypot"
 
@@ -104,10 +104,10 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
 
   # Start MITM server, running the forever command to be listening on a specific port
   LOG_FILE="$CONTAINER_NAME.log -> $(date)"
-  sudo forever -l ~/$DIRECTORY_NAME/"$LOG_FILE" -a start --uid "mitm_id_$CONTAINER_NAME" ~/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p $MITM_PORT --auto-access --auto-access-fixed 1 --debug --mitm-ip 10.0.3.1
+  sudo forever -l ~/host_logs/$DIRECTORY_NAME/"$LOG_FILE" -a start --uid "mitm_id_$CONTAINER_NAME" ~/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p $MITM_PORT --auto-access --auto-access-fixed 1 --debug --mitm-ip 10.0.3.1
 
   # Call attacker detection script with the necessary arguments
-  ./attacker_detection.sh ~/$DIRECTORY_NAME/"$LOG_FILE" $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT $OPEN_PORT
+  ./attacker_detection.sh ~/host_logs/$DIRECTORY_NAME/"$LOG_FILE" $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT $OPEN_PORT
 
 else 
   # Attacker detection script triggers this and so we countdown 1 hour until we kick off attackers
