@@ -11,6 +11,7 @@ EXTERNAL_IP=$2
 MITM_PORT=$3
 OPEN_PORT=$4
 DIRECTORY_NAME=""
+LOCAL_HOST=127.0.0.1
 
 if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
 
@@ -99,7 +100,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   # sudo iptables --insert FORWARD --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
 
   # Port forwarding ssh traffic to MITM
-  sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol tcp --dport 22 --jump DNAT --to-destination $LOCALHOST:$MITM_PORT
+  sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol tcp --dport 22 --jump DNAT --to-destination $LOCAL_HOST:$MITM_PORT
 
   # Start MITM server, running the forever command to be listening on a specific port
   LOG_FILE="$CONTAINER_NAME.log -> $(date)"
