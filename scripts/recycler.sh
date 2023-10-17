@@ -95,8 +95,8 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   sudo iptables --table nat --insert POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
 
   # Create firewall rule
-  sudo iptables --insert FORWARD --source $CONTAINER_IP --destination 0.0.0.0/0 --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
-  sudo iptables --insert FORWARD --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
+  # sudo iptables --insert FORWARD --source $CONTAINER_IP --destination 0.0.0.0/0 --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
+  # sudo iptables --insert FORWARD --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
 
   # Port forwarding ssh traffic to MITM
   sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol tcp --dport 22 --jump DNAT --to-destination $LOCALHOST:$MITM_PORT
@@ -116,8 +116,8 @@ else
   sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --jump DNAT --to-destination $CONTAINER_IP
 
   # Delete the firewall rules for the container
-  sudo iptables --delete FORWARD --source $CONTAINER_IP --destination 0.0.0.0/0 --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
-  sudo iptables --delete FORWARD --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
+  # sudo iptables --delete FORWARD --source $CONTAINER_IP --destination 0.0.0.0/0 --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
+  # sudo iptables --delete FORWARD --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
 
   # Stop the MITM instance for the container
   sudo forever stop "mitm_id_$CONTAINER_NAME"
