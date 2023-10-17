@@ -90,7 +90,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   # Assign container to external IP address
   sudo sysctl -w net.ipv4.conf.all.route_localnet=1
   CONTAINER_IP=$(sudo lxc-info $CONTAINER_NAME -iH)
-  sudo ip addr add $EXTERNAL_IP/16 brd + dev eth1
+  sudo ip addr add $EXTERNAL_IP/24 brd + dev eth1
   sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --jump DNAT --to-destination $CONTAINER_IP
   sudo iptables --table nat --insert POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
 
@@ -111,6 +111,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
 else 
   # If container already exists delete container and iptables rules
   CONTAINER_IP=$(sudo lxc-info $CONTAINER_NAME -iH)
+  sudo ip addr delete $EXTERNAL_IP/24 brd + dev eth1
   sudo iptables --table nat --delete POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
   sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --jump DNAT --to-destination $CONTAINER_IP
 
