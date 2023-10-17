@@ -106,7 +106,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   sudo forever -l ~/$DIRECTORY_NAME/$LOG_FILE -a start --uid "mitm_id_$CONTAINER_NAME" ~/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p $MITM_PORT --auto-access --auto-access-fixed 1 --debug --mitm-ip $HOST_IP
 
   # Call attacker detection script with the necessary arguments
-  ./attacker_detection.sh  ~/$DIRECTORY_NAME/$LOG_FILE $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT $OPEN_PORT
+  ./attacker_detection.sh ~/$DIRECTORY_NAME/$LOG_FILE $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT $OPEN_PORT
 
 else 
   # If container already exists delete container and iptables rules
