@@ -1,11 +1,9 @@
 #!/bin/bash
 
-
 if [ $# -ne 4 ]; then
   echo "usage: $0 <container_name external_IP_address mitm_port open_port>"
   exit 1
 fi
-
 
 # Note: For assigning a new configuration for the IP, we will pass in a random string for the CONTAINER_NAME argument
 CONTAINER_NAME=$1
@@ -13,7 +11,6 @@ EXTERNAL_IP=$2
 MITM_PORT=$3
 OPEN_PORT=$4
 DIRECTORY_NAME=""
-
 
 if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
 
@@ -48,6 +45,9 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
 
+    sudo lxc-attach -n $CONTAINER_NAME -- sudo apt install apache2
+    sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow 'Apache'
+
   elif [[ $random_hex == "8" || $random_hex  == "9" || $random_hex == "a" || $random_hex == "b" ]]
   then
     # Set the name and open port for the configuration
@@ -60,6 +60,9 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     sudo lxc-create -n $CONTAINER_NAME -t download -- -d ubuntu -r focal -a amd64
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
+
+    sudo lxc-attach -n $CONTAINER_NAME -- sudo apt install apache2
+    sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow 'Apache Secure' 
 
   elif [[ $random_hex == "c" || $random_hex == "d" || $random_hex == "e" || $random_hex == "f" ]]
   then
@@ -74,14 +77,15 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
 
-  fi
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install postfix
+    sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow 25
 
+  fi
 
   # Install openssh and allow permit root login
   sudo lxc-attach -n $CONTAINER_NAME -- bash -c "echo y | sudo apt install openssh-server
   sed -i '/#PermitRootLogin prohibit-password/c\\PermitRootLogin yes' /etc/ssh/sshd_config
   systemctl restart ssh"
-
 
   # Assign container to external IP address
   sudo sysctl -w net.ipv4.conf.all.route_localnet=1
@@ -90,35 +94,25 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --jump DNAT --to-destination $CONTAINER_IP
   sudo iptables --table nat --insert POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
 
-
   # Create firewall rule
   sudo iptables --insert FORWARD --source $CONTAINER_IP --destination 0.0.0.0/0 --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
   sudo iptables --insert FORWARD --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
 
-
   # Port forwarding ssh traffic to MITM
   sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol tcp --dport 22 --jump DNAT --to-destination $LOCALHOST:$MITM_PORT
-
 
   # Start MITM server, running the forever command to be listening on a specific port
   LOG_FILE="$CONTAINER_NAME.log -> $(date)"
   sudo forever -l ~/$DIRECTORY_NAME/$LOG_FILE -a start --uid "mitm_id_$CONTAINER_NAME" ~/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p $MITM_PORT --auto-access --auto-access-fixed 1 --debug --mitm-ip $HOST_IP
 
-
   # Call attacker detection script with the necessary arguments
-  ./attacker_detection.sh  "~/$DIRECTORY_NAME/$LOG_FILE" $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT $OPEN_PORT
-
+  ./attacker_detection.sh  ~/$DIRECTORY_NAME/$LOG_FILE $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT $OPEN_PORT
 
 else 
-  # Sleep for an hour to give attackers only an hour to attack before deletion
-  sleep 1h
-  
   # If container already exists delete container and iptables rules
   CONTAINER_IP=$(sudo lxc-info $CONTAINER_NAME -iH)
-  sudo ip addr delete $EXTERNAL_IP/16 brd + dev eth1
   sudo iptables --table nat --delete POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
   sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --jump DNAT --to-destination $CONTAINER_IP
-
 
   # Delete the firewall rules for the container
   sudo iptables --delete FORWARD --source $CONTAINER_IP --destination 0.0.0.0/0 --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
@@ -133,7 +127,6 @@ else
     sudo lxc-stop -n $CONTAINER_NAME
   fi
   sudo lxc-destroy -n $CONTAINER_NAME
-
 
   # Call the recycling script again for the same IP
   ./recycler.sh "yay" $EXTERNAL_IP $MITM_PORT 666
