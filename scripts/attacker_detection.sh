@@ -1,15 +1,21 @@
 #!/bin/bash
 
-log_file=$1
-mitm_process_id=$2
-prerouting_ip=$3
-port_mitm_listening_on=$4
-private_ip_of_container=$5
-container_name=$6
-recycler_script="./recycler.sh"
+log_file="$1"
+container_name=$2
+external_ip=$3
+mitm_port=$4
+recycler_script="/home/student/scripts/recycler.sh"
 
-tail -n 0 -f $log_file --pid $mitm_process_id | while read -r line; do
+echo "Sleeping for 5 seconds..."
+sleep 5s
+
+tail -f -n 0 "$log_file" | while read -r line; do
   # When 'tail -f' detects a new line in the file, it will enter this loop
-  $recycler_script $log_file $mitm_process_id $prerouting_ip $port_mitm_listening_on $private_ip_of_container $container_name
+  echo triggered
+  #grabbing the attackers IP so that we can block all other IPs
+  attacker_ip=$(grep "Attacker connected:" "$log_file"| sed -n -E 's/.* ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+) .*/\1/p' | head -n 1)
+  if tail -f -n 1 "$log_file" | grep -q "Attacker authenticated and is inside container"; then
+    $recycler_script $container_name $external_ip $mitm_port $attacker_ip &
+  fi
   exit 0
 done
