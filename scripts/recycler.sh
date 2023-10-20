@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [ $# -ne 4 ]; then
-  echo "usage: $0 <container_name external_IP_address mitm_port open_port>"
+  echo "usage: $0 <container_name external_IP_address mitm_port attacker_ip>"
   exit 1
 fi
 
@@ -9,11 +9,10 @@ fi
 CONTAINER_NAME=$1
 EXTERNAL_IP=$2
 MITM_PORT=$3
-OPEN_PORT=$4
+ATTACKER_IP=$4
 DIRECTORY_NAME=""
-LOCAL_HOST=127.0.0.1
 
-if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
+if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist...
 
   # Generate a random number within the specified range using OpenSSL
   random_hex=$(openssl rand -hex 1 | colrm 2)
@@ -23,7 +22,7 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   if [[ $random_hex == "0" || $random_hex == "1" || $random_hex == "2" || $random_hex == "3" ]]
   then
     # Set the name and open port for the configuration
-    CONTAINER_NAME="control_honeypot_$EXTERNAL_IP"
+    CONTAINER_NAME="SSH_$EXTERNAL_IP"
     OPEN_PORT=22
     DIRECTORY_NAME="control_honeypot"
 
@@ -33,10 +32,15 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
 
+    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "sudo apt-get update
+    echo y | sudo apt-get install ufw
+    sed -i 's/IPV6=yes/IPV6=no/' /etc/default/ufw
+    sudo systemctl restart ufw"
+
   elif [[ $random_hex == "4" || $random_hex  == "5" || $random_hex == "6" || $random_hex == "7" ]]
   then
     # Set the name and open port for the configuration
-    CONTAINER_NAME="HTTP_honeypot_$EXTERNAL_IP"
+    CONTAINER_NAME="HTTP_$EXTERNAL_IP"
     OPEN_PORT=80
     DIRECTORY_NAME="HTTP_honeypot"
 
@@ -46,13 +50,17 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
 
-    sudo lxc-attach -n $CONTAINER_NAME -- sudo apt install apache2
+    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "sudo apt-get update
+    echo y | sudo apt install apache2
+    echo y | sudo apt-get install ufw
+    sed -i 's/IPV6=yes/IPV6=no/' /etc/default/ufw
+    sudo systemctl restart ufw"
     sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow 'Apache'
 
   elif [[ $random_hex == "8" || $random_hex  == "9" || $random_hex == "a" || $random_hex == "b" ]]
   then
     # Set the name and open port for the configuration
-    CONTAINER_NAME="HTTPS_honeypot_$EXTERNAL_IP"
+    CONTAINER_NAME="HTTPS_$EXTERNAL_IP"
     OPEN_PORT=443
     DIRECTORY_NAME="HTTPS_honeypot"
 
@@ -62,13 +70,19 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
 
-    sudo lxc-attach -n $CONTAINER_NAME -- sudo apt install apache2
-    sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow 'Apache Secure' 
+    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "sudo apt-get update
+    echo y | sudo apt install apache2
+    echo y | sudo apt-get install ufw
+    sed -i 's/IPV6=yes/IPV6=no/' /etc/default/ufw
+    sudo systemctl restart ufw"
+    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "sudo ufw allow 'Apache Secure'
+    echo 'Listen 443' > /etc/apache2/ports.conf
+    sudo systemctl restart apache2"
 
   elif [[ $random_hex == "c" || $random_hex == "d" || $random_hex == "e" || $random_hex == "f" ]]
   then
     # Set the name and open port for the configuration
-    CONTAINER_NAME="SMTP_honeypot_$EXTERNAL_IP"
+    CONTAINER_NAME="SMTP_$EXTERNAL_IP"
     OPEN_PORT=25
     DIRECTORY_NAME="SMTP_honeypot"
 
@@ -78,8 +92,14 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
 
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install postfix
-    sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow 25
+    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "sudo apt-get update
+    echo y | sudo DEBIAN_FRONTEND=noninteractive apt-get install postfix
+    sed -i 's/myhostname = .*/myhostname = smtp.example.com/' /etc/postfix/main.cf
+    sudo systemctl restart postfix
+    echo y | sudo apt-get install ufw
+    sed -i 's/IPV6=yes/IPV6=no/' /etc/default/ufw
+    sudo systemctl restart ufw"
+    sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow 'Postfix'
 
   fi
 
@@ -87,6 +107,15 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   sudo lxc-attach -n $CONTAINER_NAME -- bash -c "echo y | sudo apt install openssh-server
   sed -i '/#PermitRootLogin prohibit-password/c\\PermitRootLogin yes' /etc/ssh/sshd_config
   systemctl restart ssh"
+  sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow 'OpenSSH'
+
+  # Enable ufw rules configured earlier
+  sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw enable
+
+  # (old) Limit only one session for the root user for the container, prevents two attackers from logging in at the same time
+  #sudo lxc-attach -n $CONTAINER_NAME -- bash -c "echo 'AllowUsers root' >> /etc/ssh/sshd_config
+  #echo 'MaxSessions 1' >> /etc/ssh/sshd_config
+  #sudo systemctl restart ssh"
 
   # Assign container to external IP address
   sudo sysctl -w net.ipv4.conf.all.route_localnet=1
@@ -96,36 +125,46 @@ if [ -z $(sudo lxc-ls $CONTAINER_NAME) ]; then # If container does not exist...
   sudo iptables --table nat --insert POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
 
   # Create firewall rule
-  # sudo iptables --insert FORWARD --source $CONTAINER_IP --destination 0.0.0.0/0 --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
-  # sudo iptables --insert FORWARD --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
+  # sudo iptables --insert FORWARD --source $CONTAINER_IP --destination 0.0.0.0/0 --protocol 0 --dport $OPEN_PORT --jump ACCEPT
+  # sudo iptables --insert FORWARD --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol 0 --dport $OPEN_PORT --jump ACCEPT
 
   # Port forwarding ssh traffic to MITM
-  sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol tcp --dport 22 --jump DNAT --to-destination $LOCAL_HOST:$MITM_PORT
+  sudo iptables --table nat --insert PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol tcp --dport 22 --jump DNAT --to-destination 10.0.3.1:$MITM_PORT
 
   # Start MITM server, running the forever command to be listening on a specific port
   LOG_FILE="$CONTAINER_NAME.log -> $(date)"
-  sudo forever -l ~/host_logs/$DIRECTORY_NAME/"$LOG_FILE" -a start --uid "mitm_id_$CONTAINER_NAME" ~/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p $MITM_PORT --auto-access --auto-access-fixed 1 --debug --mitm-ip 10.0.3.1
+  sudo forever -l /home/student/host_logs/$DIRECTORY_NAME/"$LOG_FILE" -a start --uid "mitm_id_$CONTAINER_NAME" /home/student/MITM/mitm.js -n $CONTAINER_NAME -i $CONTAINER_IP -p $MITM_PORT --auto-access --auto-access-fixed 1 --debug --mitm-ip 10.0.3.1
 
   # Call attacker detection script with the necessary arguments
-  ./attacker_detection.sh ~/host_logs/$DIRECTORY_NAME/"$LOG_FILE" $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT $OPEN_PORT
+  /home/student/scripts/attacker_detection.sh /home/student/host_logs/$DIRECTORY_NAME/"$LOG_FILE" $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT &
 
-else 
-  # Attacker detection script triggers this and so we countdown 1 hour until we kick off attackers
+else
+
+  sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw delete allow 'OpenSSH' 
+
+  # Limit only one session for the root user for the container, prevents two attackers from logging in at the same time
+  sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow from $ATTACKER_IP to any port 22 proto tcp
+  sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw deny 22/tcp
+
+  # Attacker detection script triggers this section
+  # so we countdown 1 hour until we kick off attackers
   sleep 1h
+
   # If container already exists delete container and iptables rules
   CONTAINER_IP=$(sudo lxc-info $CONTAINER_NAME -iH)
   sudo ip addr delete $EXTERNAL_IP/24 brd + dev eth1
   sudo iptables --table nat --delete POSTROUTING --source $CONTAINER_IP --destination 0.0.0.0/0 --jump SNAT --to-source $EXTERNAL_IP
   sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --jump DNAT --to-destination $CONTAINER_IP
+  sudo iptables --table nat --delete PREROUTING --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol tcp --dport 22 --jump DNAT --to-destination 10.0.3.1:$MITM_PORT
 
   # Delete the firewall rules for the container
-  # sudo iptables --delete FORWARD --source $CONTAINER_IP --destination 0.0.0.0/0 --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
-  # sudo iptables --delete FORWARD --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol $PROTOCOL --dport $OPEN_PORT --jump ACCEPT
+  # sudo iptables --delete FORWARD --source $CONTAINER_IP --destination 0.0.0.0/0 --protocol 0 --dport $OPEN_PORT --jump ACCEPT
+  # sudo iptables --delete FORWARD --source 0.0.0.0/0 --destination $EXTERNAL_IP --protocol 0 --dport $OPEN_PORT --jump ACCEPT
 
   # Stop the MITM instance for the container
   sudo forever stop "mitm_id_$CONTAINER_NAME"
 
-  # Stop the container and destroy it 
+  # Stop the container and destroy it
   # Just to double check if the container is running, which it should be
   if [ -n "$(sudo lxc-ls --running | grep $CONTAINER_NAME)" ]; then
     sudo lxc-stop -n $CONTAINER_NAME
@@ -133,6 +172,6 @@ else
   sudo lxc-destroy -n $CONTAINER_NAME
 
   # Call the recycling script again for the same IP
-  ./recycler.sh "yay" $EXTERNAL_IP $MITM_PORT 666
+  /home/student/scripts/recycler.sh "yay" $EXTERNAL_IP $MITM_PORT &
 
 fi
