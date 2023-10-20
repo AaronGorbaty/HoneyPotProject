@@ -21,4 +21,4 @@ sleep 5s
 sleep 5s
 /home/student/scripts/recycler.sh "name5_doesnt_exist" "128.8.238.103" "5000" "1234" &
 
-echo "Set up of host environment complete"
+echo "Set up of host environment complete."
