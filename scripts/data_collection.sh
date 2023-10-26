@@ -3,49 +3,235 @@
 high_risk_count=0
 medium_risk_count=0
 low_risk_count=0
-commands_array=()
+total_sessions=0
+interactive_commands_array=()
+noninteractive_commands_array=()
+attacker_ip_array=()
+attacker_ip_logins_array=()
+#hp_config_summary_files=()
+
+high_risk_commands_list=("tar" "unzip" "mv" "rm" "echo" "cp" "chmod" "mkdir" "mount" "wget" "ftp" "curl" "git clone" "lwp-download" "./" "cround" "httpd" "perl" ".pl" "passwd" "export" "PATH=" "kill" "nano" "pico" "vi" "vim" "sshd" "useradd" "userdel")
+medium_risk_commands_list=("w" "id" "whoami" "last" "ps" "cat/etc/*" "history" "cat .bash_history" "php -v" "uptime" "ifconfig" "uname" "cat /proc/cpuinfo")
+low_risk_commands_list=("cd" "ls" "bash" "exit" "logout" "cat" "shutdown")
+
+# Clear old versions of summary files
+: > attacker_ips.txt
+: > attacker_login_ips.txt
+: > all_attacker_commands.txt
+: > interactive_commands.txt
+: > noninteractive_commands.txt
+#: > SSH_commands_summary.txt
+#: > HTTP_commands_summary.txt
+#: > HTTPS_commands_summary.txt
+#: > SMTP_commands_summary.txt
+: > final_summary.txt
 
 # Loop through each honeypot configuration directory
-for DIRECTORY in /home/student/host_logs/*/
+for DIRECTORY in /home/student/host_logs/*
 do
+   echo "Directory: $DIRECTORY"
+   # hp_config_directory
    # Loop through each log file in each directory
    for FILE in "$DIRECTORY"/*
    do
+      #echo "File: $FILE"
       # The command after last pipe removes leading whitespace
-      commands=$(cat "$FILE" | grep reader | cut -d ':' -f 4 | sed 's/^ *//g')
-      echo "$commands"
-      # Adds each line output from grep to an array
+      interactive_commands=$(cat "$FILE" | grep reader | cut -d ':' -f 4 | sed 's/^ *//g')
+
+      # Add commands to commands array
+      while IFS= read -r interactive_line; do
+         if [ -n "$interactive_line" ]
+         then
+            interactive_commands_array+=("$interactive_line")
+         fi
+      done <<< "$interactive_commands"
+
+      noninteractive_commands=$(cat "$FILE" | grep Noninteractive | cut -d ':' -f 4 | sed 's/^ *//g')
+
+      # Add commands to commands array
+      while IFS= read -r noninteractive_line; do
+         if [ -n "$noninteractive_line" ]
+         then
+            noninteractive_commands_array+=("$noninteractive_line")
+         fi
+      done <<< "$noninteractive_commands"
+      #   if [ "$DIRECTORY" == "/home/student/host_logs/control_honeypot" ]
+      #      then
+      #         echo "$grep_line" >> SSH_commands_summary.txt
+      #         hp_config_summary_files+=("/home/student/scripts/SSH_commands_summary.txt")
+      #      elif [ "$DIRECTORY" == "/home/student/host_logs/HTTP_honeypot" ]
+      #      then
+      #         echo "$grep_line" >> HTTP_commands_summary.txt
+      #         hp_config_summary_files+=("/home/student/scripts/HTTP_commands_summary.txt")
+      #      elif [ "$DIRECTORY" == "/home/student/host_logs/HTTPS_honeypot" ]
+      #      then
+      #         echo "$grep_line" >> HTTPS_commands_summary.txt
+      #         hp_config_summary_files+=("/home/student/scripts/HTTPS_commands_summary.txt")
+      #      elif [ "$DIRECTORY" == "/home/student/host_logs/SMTP_honeypot" ]
+      #      then
+      #         echo "$grep_line" >> SMTP_commands_summary.txt
+      #         hp_config_summary_files+=("/home/student/scripts/SMTP_commands_summary.txt")
+      #      fi
+      #   fi
+      #done <<< "$commands"
+
+      #for SUMMARY_FILE in "${hp_config_summary_files[@]}"
+      #do
+      #   while IFS="" read -r file_line || [ -n "$file_line" ]; do
+      #      # Low risk category
+      #      for LRC in "${low_risk_commands_list[@]}"
+      #      do
+      #         if [[ "$file_line" == *"$LRC"* ]]
+      #         then
+      #            low_risk_count=$((low_risk_count+1))
+      #         fi
+      #      done
+      #      # Medium risk category
+      #      for MRC in "${medium_risk_commands_list[@]}"
+      #      do
+      #         if [[ "$file_line" == *"$MRC"* ]]
+      #         then
+      #            medium_risk_count=$((medium_risk_count+1))
+      #         fi
+      #      done
+      #      # High risk category
+      #      for HRC in "${high_risk_commands_list[@]}"
+      #      do
+      #         if [[ "$file_line" == *"$HRC"* ]]
+      #         then
+      #            high_risk_count=$((high_risk_count+1))
+      #         fi
+      #      done
+      #   done < "$SUMMARY_FILE"
+      #   { echo "Number of High Risk Commands:" $high_risk_count
+      #     echo "Number of Medium Risk Commands:" $medium_risk_count
+      #     echo "Number of Low Risk Commands:" $low_risk_count
+      #   } >> "$SUMMARY_FILE"
+      # done
+
+      #high_risk_count=0
+      #medium_risk_count=0
+      #low_risk_count=0
+
+      num_sessions=$(cat "$FILE" | grep -c "Attacker authenticated")
+      # Total up number of sessions recorded in each log file
+      total_sessions=$((total_sessions+num_sessions))
+
+      attacker_ips=$(cat "$FILE" | grep "Attacker connected" | cut -d ' ' -f 8 | sort | uniq -c)
+      attacker_login_ips=$(cat "$FILE" | grep "Threshold" | cut -d ' ' -f 8 | cut -d ',' -f 1)
+      #echo $attacker_ips
+      # Add unique attacker IPs to array
       while IFS= read -r line; do
-         commands_array+=("$line")
-      done <<< "$commands"
+         if [[ ! " ${attacker_ip_array[*]} " =~ ${line} ]]
+         then
+            attacker_ip_array+=("$line")
+            echo "$line" >> attacker_ips.txt
+         fi
+      done <<< "$attacker_ips"
+      # echo "$attacker_ips" >> attacker_ips.txt
+      # Save data about attacker IPs in separate text file
+      while IFS= read -r line; do
+         if [[ ! " ${attacker_ip_logins_array[*]} " =~ ${line} ]]
+         then
+            attacker_ip_logins_array+=("$line")
+            echo "$line" >> attacker_login_ips.txt
+         fi
+      done <<< "$attacker_login_ips"
+      # echo "$attacker_login_ips" >> attacker_login_ips.txt
    done
 done
 
-for COMMAND in "${commands_array[@]}"
+for COMMAND in "${interactive_commands_array[@]}"
 do
-   # If the element in the array is not of length 0
-   if [ -n "$COMMAND" ]
+
+   # Save data about attacker commands in separate text file
+   echo "$COMMAND" >> interactive_commands.txt
+   # Use the classifications from research paper Arifianto et al.
+
+   if [[ "$COMMAND" == *"./"* ]]
    then
-      # echo $FILE
-      echo "$COMMAND"
-      # Use the rest of the classifications from research paper
-      # Low risk category
-      if [[ "$COMMAND" == *"exit"* ]]
+      COMMAND=$(echo "$COMMAND" | cut -d ' ' -f 1)
+      # echo $COMMAND
+   fi
+
+   # Low risk category
+   for LRC in "${low_risk_commands_list[@]}"
+   do
+      if [[ "$COMMAND" == *"$LRC"* ]]
       then
          low_risk_count=$((low_risk_count+1))
-      # Medium risk category
-      elif [[ "$COMMAND" == *"whoami"* ]]
+      fi
+   done
+   # Medium risk category
+   for MRC in "${medium_risk_commands_list[@]}"
+   do
+      if [[ "$COMMAND" == *"$MRC"* ]]
       then
          medium_risk_count=$((medium_risk_count+1))
-      # High risk category
-      elif [[ "$COMMAND" == *"./"* ]]
+      fi
+   done
+   # High risk category
+   for HRC in "${high_risk_commands_list[@]}"
+   do
+      if [[ "$COMMAND" == *"$HRC"* ]]
       then
          high_risk_count=$((high_risk_count+1))
-      # Do we need an else statement for commands not listed in the paper?
       fi
-   fi
+   done
+   # Do we need an else statement for commands not listed in the paper?
 done
 
-echo "Number of High Risk Commands:" $high_risk_count
-echo "Number of Medium Risk Commands:" $medium_risk_count
-echo "Number of Low Risk Commands:" $low_risk_count
+for COMMAND in "${noninteractive_commands_array[@]}"
+do
+   # Save data about attacker commands in separate text file
+   echo "$COMMAND" >> noninteractive_commands.txt
+   # Use the classifications from research paper Arifianto et al.
+
+   if [[ "$COMMAND" == *"./"* ]]
+   then
+      COMMAND=$(echo "$COMMAND" | cut -d ' ' -f 1)
+      # echo $COMMAND
+   fi
+
+   # Low risk category
+   for LRC in "${low_risk_commands_list[@]}"
+   do
+      if [[ "$COMMAND" == *"$LRC"* ]]
+      then
+         low_risk_count=$((low_risk_count+1))
+      fi
+   done
+   # Medium risk category
+   for MRC in "${medium_risk_commands_list[@]}"
+   do
+      if [[ "$COMMAND" == *"$MRC"* ]]
+      then
+         medium_risk_count=$((medium_risk_count+1))
+      fi
+   done
+   # High risk category
+   for HRC in "${high_risk_commands_list[@]}"
+   do
+      if [[ "$COMMAND" == *"$HRC"* ]]
+      then
+         high_risk_count=$((high_risk_count+1))
+      fi
+   done
+   # Do we need an else statement for commands not listed in the paper?
+done
+# Save summary of findings in log files in separate text file
+
+cat interactive_commands.txt >> all_attacker_commands.txt
+cat noninteractive_commands.txt >> all_attacker_commands.txt
+
+{
+  echo $'\nTotal Number of Commands:' $((${#interactive_commands_array[@]} + ${#noninteractive_commands_array[@]}))
+  echo "Number of Interactive Commands:" ${#interactive_commands_array[@]}
+  echo "Number of Noninteractive Commands:" ${#noninteractive_commands_array[@]}
+  echo "Number of Unique Attackers:" ${#attacker_ip_array[@]}
+  echo "Number of Unique Attacker Sign Ins:" ${#attacker_ip_logins_array[@]}
+  echo "Number of Sessions:" $total_sessions
+  echo "Number of High Risk Commands:" $high_risk_count
+  echo "Number of Medium Risk Commands:" $medium_risk_count
+  echo "Number of Low Risk Commands:" $low_risk_count
+} >> final_summary.txt
