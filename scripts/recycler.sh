@@ -1,7 +1,7 @@
 #!/bin/bash
 
-if [ $# -ne 4 ]; then
-  echo "usage: $0 <container_name external_IP_address mitm_port attacker_ip>"
+if [ $# -ne 3 ]; then
+  echo "usage: $0 <container_name external_IP_address mitm_port>"
   exit 1
 fi
 
@@ -9,7 +9,6 @@ fi
 CONTAINER_NAME=$1
 EXTERNAL_IP=$2
 MITM_PORT=$3
-ATTACKER_IP=$4
 DIRECTORY_NAME=""
 
 if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist...
@@ -23,7 +22,6 @@ if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist..
   then
     # Set the name and open port for the configuration
     CONTAINER_NAME="SSH_$EXTERNAL_IP"
-    OPEN_PORT=22
     DIRECTORY_NAME="control_honeypot"
 
     # Create and start container for specific configuration
@@ -32,7 +30,7 @@ if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist..
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
 
-    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "sudo apt-get update
+    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "echo y | sudo apt-get update
     echo y | sudo apt-get install ufw
     sed -i 's/IPV6=yes/IPV6=no/' /etc/default/ufw
     sudo systemctl restart ufw"
@@ -41,7 +39,6 @@ if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist..
   then
     # Set the name and open port for the configuration
     CONTAINER_NAME="HTTP_$EXTERNAL_IP"
-    OPEN_PORT=80
     DIRECTORY_NAME="HTTP_honeypot"
 
     # Create and start specific configuration
@@ -50,8 +47,8 @@ if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist..
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
 
-    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "sudo apt-get update
-    echo y | sudo apt install apache2
+    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "echo y | sudo apt-get update
+    echo y | sudo apt-get install apache2
     echo y | sudo apt-get install ufw
     sed -i 's/IPV6=yes/IPV6=no/' /etc/default/ufw
     sudo systemctl restart ufw"
@@ -61,7 +58,6 @@ if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist..
   then
     # Set the name and open port for the configuration
     CONTAINER_NAME="HTTPS_$EXTERNAL_IP"
-    OPEN_PORT=443
     DIRECTORY_NAME="HTTPS_honeypot"
 
     # Create and start specific configuration
@@ -70,8 +66,8 @@ if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist..
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
 
-    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "sudo apt-get update
-    echo y | sudo apt install apache2
+    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "echo y | sudo apt-get update
+    echo y | sudo apt-get install apache2
     echo y | sudo apt-get install ufw
     sed -i 's/IPV6=yes/IPV6=no/' /etc/default/ufw
     sudo systemctl restart ufw"
@@ -83,7 +79,6 @@ if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist..
   then
     # Set the name and open port for the configuration
     CONTAINER_NAME="SMTP_$EXTERNAL_IP"
-    OPEN_PORT=25
     DIRECTORY_NAME="SMTP_honeypot"
 
     # Create and start specific configuration
@@ -92,7 +87,7 @@ if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist..
     sudo lxc-start -n $CONTAINER_NAME
     sleep 5
 
-    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "sudo apt-get update
+    sudo lxc-attach -n $CONTAINER_NAME -- bash -c "echo y | sudo apt-get update
     echo y | sudo DEBIAN_FRONTEND=noninteractive apt-get install postfix
     sed -i 's/myhostname = .*/myhostname = smtp.example.com/' /etc/postfix/main.cf
     sudo systemctl restart postfix
@@ -104,7 +99,7 @@ if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist..
   fi
 
   # Install openssh and allow permit root login
-  sudo lxc-attach -n $CONTAINER_NAME -- bash -c "echo y | sudo apt install openssh-server
+  sudo lxc-attach -n $CONTAINER_NAME -- bash -c "echo -e 'y\n' | sudo apt-get install openssh-server
   sed -i '/#PermitRootLogin prohibit-password/c\\PermitRootLogin yes' /etc/ssh/sshd_config
   systemctl restart ssh"
   sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow 'OpenSSH'
@@ -139,17 +134,7 @@ if [ -z $(sudo lxc-ls "$CONTAINER_NAME") ]; then # If container does not exist..
   /home/student/scripts/attacker_detection.sh /home/student/host_logs/$DIRECTORY_NAME/"$LOG_FILE" $CONTAINER_NAME $EXTERNAL_IP $MITM_PORT &
 
 else
-
-  sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw delete allow 'OpenSSH' 
-
-  # Limit only one session for the root user for the container, prevents two attackers from logging in at the same time
-  sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw allow from $ATTACKER_IP to any port 22 proto tcp
-  sudo lxc-attach -n $CONTAINER_NAME -- sudo ufw deny 22/tcp
-
   # Attacker detection script triggers this section
-  # so we countdown 1 hour until we kick off attackers
-  sleep 1h
-
   # If container already exists delete container and iptables rules
   CONTAINER_IP=$(sudo lxc-info $CONTAINER_NAME -iH)
   sudo ip addr delete $EXTERNAL_IP/24 brd + dev eth1
@@ -165,11 +150,7 @@ else
   sudo forever stop "mitm_id_$CONTAINER_NAME"
 
   # Stop the container and destroy it
-  # Just to double check if the container is running, which it should be
-  if [ -n "$(sudo lxc-ls --running | grep $CONTAINER_NAME)" ]; then
-    sudo lxc-stop -n $CONTAINER_NAME
-  fi
-  sudo lxc-destroy -n $CONTAINER_NAME
+  sudo lxc-destroy -f -n $CONTAINER_NAME
 
   # Call the recycling script again for the same IP
   /home/student/scripts/recycler.sh "yay" $EXTERNAL_IP $MITM_PORT &
