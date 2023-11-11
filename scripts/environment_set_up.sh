@@ -6,7 +6,9 @@
 # Delete all existing containers
 containers_to_destroy=$(sudo lxc-ls --fancy | tail -n +2 | awk '{print $1}')
 for container in $containers_to_destroy; do
-  sudo lxc-destroy -f -n $container
+  if ! echo $container | grep -q "Honeypot"; then
+    sudo lxc-destroy -f -n $container
+  fi
 done
 
 # Set up baseline firewall rules
